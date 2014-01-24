@@ -50,13 +50,13 @@ struct clk *hdmi_cec_clk;
 static int s5p_cec_open(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	printk(KERN_INFO "s5p_cec_open\n");
+	pr_info("s5p_cec_open\n");
 
 	mutex_lock(&cec_lock);
 	clk_enable(hdmi_cec_clk);
 
 	if (atomic_read(&hdmi_on)) {
-		tvout_dbg("do not allow multiple open for tvout cec\n");
+		pr_info("cec: do not allow multiple open for tvout cec\n");
 		ret = -EBUSY;
 		goto err_multi_open;
 	} else
@@ -82,7 +82,7 @@ err_multi_open:
 
 static int s5p_cec_release(struct inode *inode, struct file *file)
 {
-	printk(KERN_INFO "s5p_cec_release, hdmi_on=%i\n", atomic_read(&hdmi_on));
+	pr_info("s5p_cec_release, hdmi_on=%i\n", atomic_read(&hdmi_on));
 	
 	atomic_dec(&hdmi_on);
 
@@ -100,7 +100,7 @@ static ssize_t s5p_cec_read(struct file *file, char __user *buffer,
 	ssize_t retval;
 	unsigned long spin_flags;
 	
-	printk(KERN_INFO "s5p_cec_read, %li bytes\n", (long)count);
+	pr_info("s5p_cec_read, %li bytes\n", (long)count);
 
 	if (wait_event_interruptible(cec_rx_struct.waitq,
 			atomic_read(&cec_rx_struct.state) == STATE_DONE)) {
@@ -116,7 +116,7 @@ static ssize_t s5p_cec_read(struct file *file, char __user *buffer,
 
 	if (copy_to_user(buffer, cec_rx_struct.buffer, cec_rx_struct.size)) {
 		spin_unlock_irqrestore(&cec_rx_struct.lock, spin_flags);
-		printk(KERN_ERR " copy_to_user() failed!\n");
+		pr_info("cec: copy_to_user() failed!\n");
 
 		return -EFAULT;
 	}
@@ -135,7 +135,7 @@ static ssize_t s5p_cec_write(struct file *file, const char __user *buffer,
 {
 	char *data;
 	
-	printk(KERN_INFO "s5p_cec_write, %li bytes\n", (long)count);
+	pr_info("s5p_cec_write, %li bytes\n", (long)count);
 
 	/* check data size */
 
@@ -145,12 +145,12 @@ static ssize_t s5p_cec_write(struct file *file, const char __user *buffer,
 	data = kmalloc(count, GFP_KERNEL);
 
 	if (!data) {
-		printk(KERN_ERR " kmalloc() failed!\n");
+		pr_info("cec: kmalloc() failed!\n");
 		return -1;
 	}
 
 	if (copy_from_user(data, buffer, count)) {
-		printk(KERN_ERR " copy_from_user() failed!\n");
+		pr_info("cec: copy_from_user() failed!\n");
 		kfree(data);
 		return -EFAULT;
 	}
@@ -164,17 +164,17 @@ static ssize_t s5p_cec_write(struct file *file, const char __user *buffer,
 		atomic_read(&cec_tx_struct.state)
 		!= STATE_TX)) 
 	{
-		printk(KERN_INFO "\ttx no interrupt received\n");
+		pr_info("cec: \ttx no interrupt received\n");
 		return -ERESTARTSYS;
 	}
 
 	if (atomic_read(&cec_tx_struct.state) == STATE_ERROR)
 	{
-		printk(KERN_INFO "\ttx error\n");
+		pr_info("cec: \ttx error\n");
 		return -1;
 	}
 
-	printk(KERN_INFO "\twritten count: %i\n", count);
+	pr_info("cec: \twritten count: %i\n", count);
 	return count;
 }
 
@@ -183,14 +183,14 @@ static long s5p_cec_ioctl(struct file *file, unsigned int cmd,
 {
 	u32 laddr;
 	
-	printk(KERN_INFO "s5p_cec_ioctl, cmd = 0x%x, arg = 0x%lx\n", cmd, arg);
+	pr_info("s5p_cec_ioctl, cmd = 0x%x, arg = 0x%lx\n", cmd, arg);
 
 	switch (cmd) {
 	case CEC_IOC_SETLADDR:
 		if (get_user(laddr, (u32 __user *) arg))
 			return -EFAULT;
 
-		tvout_dbg("logical address = 0x%02x\n", laddr);
+		pr_info("cec: logical address = 0x%02x\n", laddr);
 
 		s5p_cec_set_addr(laddr);
 		break;
@@ -208,7 +208,7 @@ static u32 s5p_cec_poll(struct file *file, poll_table *wait)
 
 	if (atomic_read(&cec_rx_struct.state) == STATE_DONE)
 	{
-		printk(KERN_INFO "s5p_cec_poll: rx = done\n");
+		pr_info("s5p_cec_poll: rx = done\n");
 		return POLLIN | POLLRDNORM;
 	}
 	return 0;
@@ -233,14 +233,14 @@ static struct miscdevice cec_misc_device = {
 static irqreturn_t s5p_cec_irq_handler(int irq, void *dev_id)
 {
 	u32 status = s5p_cec_get_status();
-	printk(KERN_INFO "s5p_cec_irq_handler on irq %i\n", irq);
+	pr_info("s5p_cec_irq_handler on irq %i\n", irq);
 
 	if (status & CEC_STATUS_TX_DONE) {
 		if (status & CEC_STATUS_TX_ERROR) {
-			tvout_dbg(" CEC_STATUS_TX_ERROR!\n");
+			pr_info("cec: CEC_STATUS_TX_ERROR!\n");
 			s5p_cec_set_tx_state(STATE_ERROR);
 		} else {
-			tvout_dbg(" CEC_STATUS_TX_DONE!\n");
+			pr_info("cec: CEC_STATUS_TX_DONE!\n");
 			s5p_cec_set_tx_state(STATE_DONE);
 		}
 
@@ -251,13 +251,13 @@ static irqreturn_t s5p_cec_irq_handler(int irq, void *dev_id)
 
 	if (status & CEC_STATUS_RX_DONE) {
 		if (status & CEC_STATUS_RX_ERROR) {
-			tvout_dbg(" CEC_STATUS_RX_ERROR!\n");
+			pr_info("cec: CEC_STATUS_RX_ERROR!\n");
 			s5p_cec_rx_reset();
 
 		} else {
 			u32 size;
 
-			tvout_dbg(" CEC_STATUS_RX_DONE!\n");
+			pr_info("cec: CEC_STATUS_RX_DONE!\n");
 
 			/* copy data from internal buffer */
 			size = status >> 24;
@@ -292,38 +292,38 @@ static int s5p_cec_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct resource *res;
 	
-	dev_info(dev, "Probe start\n");
+	pr_info("cec: Probe start\n");
 
 	pdata = to_platform_device(&pdev->dev)->dev.platform_data;
-	dev_info(dev, "s5p_cec_probe: pdata=%p\n", pdata);
+	pr_info("s5p_cec_probe: pdata=%p\n", pdata);
 	if (pdata && pdata->cfg_gpio)
 		pdata->cfg_gpio(pdev);
 	
 	/* get ioremap addr */
 	ret = s5p_cec_mem_probe(pdev);
 	if (ret != 0) {
-		dev_err(dev, "Failed to s5p_cec_mem_probe(). ret = %d\n", ret);
+		pr_info("Failed to s5p_cec_mem_probe(). ret = %d\n", ret);
 		goto err_mem_probe;
 	}
 
 	if (misc_register(&cec_misc_device)) {
-		dev_err(dev, "Couldn't register device 10, %d.\n", CEC_MINOR);
+		pr_info("cec: Couldn't register device 10, %d.\n", CEC_MINOR);
 		ret = -EBUSY;
 		goto err_misc_register;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res == NULL) {
-		dev_err(&pdev->dev, "Failed to get irq resource.\n");
+		pr_info("cec: Failed to get irq resource.\n");
 		ret = -ENODEV;
 		goto err_get_irq;
 	}
 	irq_num = res->start;
 
-	dev_info(dev, "Requesting irq %i for %s\n", irq_num, pdev->name);
+	pr_info("cec: Requesting irq %i for %s\n", irq_num, pdev->name);
 	ret = request_irq(irq_num, s5p_cec_irq_handler, IRQF_DISABLED, pdev->name, &pdev->id); 
 	if (ret != 0) {
-		dev_err(dev, "Failed to install irq (%d), error %i\n", irq_num, ret);
+		pr_info("cec: Failed to install irq (%d), error %i\n", irq_num, ret);
 		goto err_request_irq;
 	}
 
@@ -333,7 +333,7 @@ static int s5p_cec_probe(struct platform_device *pdev)
 
 	buffer = kmalloc(CEC_TX_BUFF_SIZE, GFP_KERNEL);
 	if (!buffer) {
-		dev_err(dev, "kmalloc() failed\n");
+		pr_info("cec: kmalloc() failed\n");
 		ret = -EIO;
 		goto err_kmalloc;
 	}
@@ -343,12 +343,12 @@ static int s5p_cec_probe(struct platform_device *pdev)
 	
 	hdmi_cec_clk = clk_get(&pdev->dev, "hdmicec");
 	if (IS_ERR(hdmi_cec_clk)) {
-		dev_err(dev, "failed to find clock 'hdmicec'\n");
+		pr_info("cec: failed to find clock 'hdmicec'\n");
 		ret = -ENOENT;
 		goto err_clock;
 	}
 
-	dev_info(&pdev->dev, "probe successful\n");
+	pr_info("cec: probe successful\n");
 	return ret;	// All good
 
 	// Unwind the allocations on error
@@ -370,10 +370,10 @@ static int s5p_cec_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct resource *res;
-	dev_info(dev, "s5p_cec_remove, putting clk to sleep\n");
+	pr_info("s5p_cec_remove, putting clk to sleep\n");
 	clk_put(hdmi_cec_clk);	
 	
-	dev_info(dev, "s5p_cec_remove, cec_rx_struct.buffer=%p\n", cec_rx_struct.buffer);
+	pr_info("s5p_cec_remove, cec_rx_struct.buffer=%p\n", cec_rx_struct.buffer);
 	if(cec_rx_struct.buffer)
 	{
 		kfree(cec_rx_struct.buffer);
@@ -384,7 +384,7 @@ static int s5p_cec_remove(struct platform_device *pdev)
 	if(res)
 	{
 		int irq_num = res->start;
-		printk(KERN_INFO "s5p_cec_remove, irq=%i\n", irq_num); 
+		pr_info("s5p_cec_remove, irq=%i\n", irq_num); 
 		free_irq(irq_num, &pdev->id);
 	}
 	

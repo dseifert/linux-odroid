@@ -140,7 +140,7 @@ void s5p_cec_copy_packet(char *data, size_t count)
 		writeb(data[i], cec_base + (S5P_CEC_TX_BUFF0 + (i * 4)));
 		i++;
 	}
-	printk(KERN_INFO "s5p_cec_copy_packet(): written %i bytes to cec_base\n", count);
+	pr_info("s5p_cec_copy_packet(): written %i bytes to cec_base\n", count);
 
 	writeb(count, cec_base + S5P_CEC_TX_BYTES);
 	s5p_cec_set_tx_state(STATE_TX);
@@ -203,35 +203,33 @@ int s5p_cec_mem_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
-		dev_err(&pdev->dev,
-			"Failed to get memory region resource for cec\n");
+		pr_info("cec: Failed to get memory region resource for cec\n");
 		return -ENOENT;
 	} else
 		size = resource_size(res);
 
 	cec_mem = request_mem_region(res->start, size, pdev->name);
 	if (cec_mem == NULL) {
-		dev_err(&pdev->dev, "Failed to get memory at size %i, name %s\n", size, pdev->name);
+		pr_info("cec: Failed to get memory at size %i, name %s\n", size, pdev->name);
 		return -ENOENT;
 	}
 
 	cec_base = ioremap(res->start, size);
 	if (cec_base == NULL) {
-		dev_err(&pdev->dev,
-			"Failed to ioremap address region for cec\n");
+		pr_info("cec: Failed to ioremap address region for cec\n");
 		return -ENOENT;
 	}
-	dev_info(&pdev->dev, "s5p_cec_mem_probe(): mapped cec_base to %p, size 0x%x\n", cec_base, size);
+	pr_info("s5p_cec_mem_probe(): mapped cec_base to %p, size 0x%x\n", cec_base, size);
 	return ret;
 }
 
 int s5p_cec_mem_release(struct platform_device *pdev)
 {
-	dev_info(&pdev->dev, "Releasing memory\n");
+	pr_info("cec: Releasing memory\n");
 	iounmap(cec_base);
 	if (cec_mem != NULL) {
 		if (release_resource(cec_mem))
-			dev_err(&pdev->dev, "Can't remove s5p-cec driver\n");
+			pr_info("cec: Can't remove s5p-cec driver\n");
 
 		kfree(cec_mem);
 
