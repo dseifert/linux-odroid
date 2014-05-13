@@ -196,8 +196,8 @@ static struct i2c_board_info hkdk4412_i2c_devs7[] __initdata = {
 
 #if defined(CONFIG_ODROID_U2)
 /* for u3 I/O shield board */
-#define		GPIO_I2C4_SDA	EXYNOS4_GPX1(1)
-#define		GPIO_I2C4_SCL	EXYNOS4_GPX1(0)
+#define		GPIO_I2C4_SDA	EXYNOS4_GPX1(1) /* GPIO-PIN 200 */
+#define		GPIO_I2C4_SCL	EXYNOS4_GPX1(0) /* GPIO-PIN 199 */
 
 static struct 	i2c_gpio_platform_data 	i2c4_gpio_platdata = {
 	.sda_pin = GPIO_I2C4_SDA,
@@ -506,11 +506,8 @@ static struct platform_device *hkdk4412_devices[] __initdata = {
 	&s3c_device_i2c1,
 	&gpio_device_i2c2,
 	&s3c_device_i2c3,
-#if defined(CONFIG_ODROID_U2)
-	&gpio_device_i2c4,
 #if defined(CONFIG_W1_MASTER_GPIO) || defined(CONFIG_W1_MASTER_GPIO_MODULE)
         &odroidu3_w1_device,
-#endif
 #endif
 	&s3c_device_i2c7,
 	&s3c_device_rtc,
@@ -530,6 +527,7 @@ static struct platform_device *hkdk4412_devices[] __initdata = {
 	&s5p_device_mfc_l,
 	&s5p_device_mfc_r,
 	&s5p_device_g2d,
+	&s5p_device_jpeg,
 	&mali_gpu_device,
 #if defined(CONFIG_S5P_DEV_TV)
 	&s5p_device_hdmi,
