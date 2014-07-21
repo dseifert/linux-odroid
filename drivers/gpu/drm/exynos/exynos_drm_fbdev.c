@@ -16,7 +16,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_crtc_helper.h>
-#include <ump/ump_kernel_interface_ref_drv.h>
+#include <linux/dma-buf.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
@@ -25,8 +25,8 @@
 
 #define MAX_CONNECTOR		4
 #define PREFERRED_BPP		32
-#define GET_UMP_SECURE_ID_BUF1   _IOWR('m', 311, unsigned int)
-#define GET_UMP_SECURE_ID_BUF2   _IOWR('m', 312, unsigned int)
+#define IOCTL_GET_FB_DMA_BUF _IOWR('m',0xF9, __u32 )
+#define NUM_BUFFERS 1
 
 #define to_exynos_fbdev(x)	container_of(x, struct exynos_drm_fbdev,\
 				drm_fb_helper)
@@ -65,56 +65,49 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	return 0;
 }
 
-static int _disp_get_ump_secure_id(struct fb_info *info, unsigned long arg, int buf) {
-
-        int buf_len = info->fix.smem_len;
-
-        u32 __user *psecureid = (u32 __user *) arg;
-        ump_secure_id secure_id;
-        ump_dd_physical_block ump_memory_description;
-        ump_dd_handle ump_wrapped_buffer;
-
-        ump_memory_description.addr = info->fix.smem_start + (buf_len * buf);
-        ump_memory_description.size = info->fix.smem_len;
-                                        
-        if(buf > 0) { 
-                ump_memory_description.addr += (buf_len * (buf - 1));
-                ump_memory_description.size = buf_len;
-        } 
-        
-        ump_wrapped_buffer = ump_dd_handle_create_from_phys_blocks(&ump_memory_description, 1);
-
-        secure_id = ump_dd_secure_id_get(ump_wrapped_buffer);
-        
-        return put_user((unsigned int)secure_id, psecureid);
-}
-
-static int do_hkdk_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg) 
+static u32 exynos_fb_get_dma_buf( struct fb_info *info)
 {
-        int ret = 0;
+    int fd = -1;
+    struct drm_fb_helper *helper = info->par;
+    struct drm_device *dev = helper->dev;
+    struct exynos_drm_fbdev *exynos_fbd = to_exynos_fbdev(helper);
+    struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
 
-        switch (cmd) {
-        case GET_UMP_SECURE_ID_BUF1: {
-                pr_emerg("exynos_drm: GET_UMP_SECURE_ID_BUF1 called\n");
-		return _disp_get_ump_secure_id(info, arg, 0);
-                break;
-        }
+    if( dev->driver->gem_prime_export )
+    {
+        struct dma_buf *buf = NULL;
+        buf = dev->driver->gem_prime_export( dev, &exynos_gem_obj->base, O_RDWR);
+        if(buf)
+            fd = dma_buf_fd(buf, O_RDWR);
+    }
 
-        case GET_UMP_SECURE_ID_BUF2: {
-                pr_emerg("exynos_drm: GET_UMP_SECURE_ID_BUF2 called\n");
-		return _disp_get_ump_secure_id(info, arg, 1);
-                break;
-        }
-
-        default:
-                printk(KERN_ERR "exynos_drm: unknown ioctl command: %x\n", cmd);
-                ret =  -EINVAL;
-                break;
-        }
-        return ret;
+    return fd;
 }
 
+static int fb_ioctl(struct fb_info *info, unsigned int cmd,
+            unsigned long arg)
+{
+    int ret;
 
+    switch (cmd) {
+    case IOCTL_GET_FB_DMA_BUF:
+    {
+        u32 __user *out_ptr = (u32 __user *)arg;
+        u32 buf_fd = exynos_fb_get_dma_buf(info);
+        if(buf_fd == -1)
+        {
+            ret = -ENOMEM;
+            break;
+        }
+        ret = put_user(buf_fd, out_ptr);
+        break;
+    }
+    default:
+        ret = -ENOTTY;
+    }
+
+    return ret;
+}
 
 static struct fb_ops exynos_drm_fb_ops = {
 	.owner		= THIS_MODULE,
@@ -127,7 +120,7 @@ static struct fb_ops exynos_drm_fb_ops = {
 	.fb_blank	= drm_fb_helper_blank,
 	.fb_pan_display	= drm_fb_helper_pan_display,
 	.fb_setcmap	= drm_fb_helper_setcmap,
-	.fb_ioctl = do_hkdk_ioctl,
+	.fb_ioctl	= fb_ioctl,
 };
 
 static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
@@ -210,7 +203,7 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 			sizes->surface_bpp);
 
 	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height;
+	mode_cmd.height = sizes->surface_height * NUM_BUFFERS;
 	mode_cmd.pitches[0] = sizes->surface_width * (sizes->surface_bpp >> 3);
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 							  sizes->surface_depth);
